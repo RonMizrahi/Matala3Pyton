@@ -1,8 +1,10 @@
 import logging
 
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
+import networkx as nx
 from scapy.all import *
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 # class bcolors:
@@ -20,9 +22,11 @@ import matplotlib.pyplot as plt
 class pcap_parser:
     id = 0
     _res = []
+    _path = ""
 
     def __init__(self, path):
         self._res = rdpcap(path).res
+        self._path = path
 
     def __getID__(self):
         self.id += 1
@@ -64,14 +68,15 @@ class pcap_parser:
                 dst[pkt.payload.dst] += 1
         sorted_src = []
         sorted_dst = []
+
         for k in sorted(src):
             sorted_src.append(src[k])
         for k in sorted(dst):
             sorted_dst.append(dst[k])
-        plt.bar(range(len(src)), sorted_src, align='center', label='Source', color='green')
-        plt.xticks(range(len(src)), sorted(src.keys()))
-        plt.bar(range(len(dst)), sorted_dst, align='center', label='Destination', color='red')
-        plt.xticks(range(len(dst)), sorted(dst.keys()))
+        plt.bar( sorted_src,range(len(src)), align='center', label='Source', color='blue')
+        plt.yticks(range(len(src)), sorted(src.keys()))
+        plt.bar(sorted_dst,range(len(dst)),  align='center', label='Destination', color='yellow')
+        plt.yticks(range(len(dst)), sorted(dst.keys()))
         plt.title('Sources and Destinations Count')
         plt.legend()
         plt.show()
@@ -93,13 +98,22 @@ class pcap_parser:
                 protocol_map[pkt.payload.payload.name] += 1
         sorted_keys = []
         sorted_vals = []
+
+        #colors = ['yellowgreen', 'gold', 'lightskyblue', 'lightcoral']
         for k in sorted(protocol_map):
             sorted_keys.append(k)
             sorted_vals.append(protocol_map[k])
-        plt.pie(sorted_vals, labels=sorted_keys, startangle=90, shadow=True, autopct='1.1%%')
+        # explode = ()
+        # for val in range(sorted_vals):
+        #     if(val>=1):
+        #         explode.insert(0)
+        # explode.insert(0.1)
+
+        plt.pie(sorted_vals, labels=sorted_keys, startangle=90, shadow=True, autopct='%1.1f%%')
         plt.title('Protocol Count')
+        plt.axis('equal')
         plt.show()
-        plt.pie(sorted_vals, labels=sorted_keys, startangle=90, shadow=True, autopct='1.1%%')
+        plt.pie(sorted_vals, labels=sorted_keys, startangle=90, shadow=True, autopct='%1.1f%%')
         plt.title('Protocol Count')
         self.__export__('protocol')
 
@@ -146,19 +160,39 @@ class pcap_parser:
     def clear(self):
         self._res = []
 
+    def plot_connectivity(self):
+        G = nx.Graph()
+        connections = set()
+        nodes = set()
+        with PcapReader(self._path) as pcap_reader:
+            for p in pcap_reader:
+                if hasattr(p.payload, 'src') and hasattr(p.payload, 'dst'):
+                    nodes.add(p.src)
+                    nodes.add(p.dst)
+                    connections.add((p.src, p.dst))
+        G.add_nodes_from(nodes)
+        G.add_edges_from(connections)
+        plt.rcParams['figure.figsize'] = 10, 8
+        pos = nx.spring_layout(G, scale=1.0, iterations=100)
+        nx.draw(G, pos, node_color='c', edge_color='k', with_labels=True)
+        plt.show()
+        self.__export__('graph')
+
+
+
 
 def load_file():
-    file_num = input('Enter file number or q to exit: ')
-    if file_num == 'q': return 0
-    print('\tLoading ' + file_num + '.cap file, please wait . . . ')
-    p = pcap_parser('/home/orevron/PycharmProjects/local/pcap/' + str(file_num) + '.cap')
-    print('\t\033[92mDone!\033[0m')
+    file_num = input('Enter pcap file number or exit to exit(1-6): ')
+    if file_num == 'exit': return 0
+    print('\tLoading ' + file_num + '.cap file, it may take a few seconds...')
+    p = pcap_parser('/home/vitali/PycharmProjects/untitled/' + str(file_num) + '.cap')
+    print('\t\033[92mFile loaded!\033[0m')
     return p
 
 
 def end_plotting():
     end_message1 = '\t\033[94m[any key]\033[0m to continue, \033[92m[n]'
-    end_message2 = '\033[0m to load new file \033[91m[q]\033[0m to exit: '
+    end_message2 = '\033[0m to load new file \033[91m[exit]\033[0m to exit: '
     file_num = input(end_message1 + end_message2)
     return file_num
 
@@ -166,9 +200,10 @@ def end_plotting():
 def draw_menu():
     print('Main Menu:')
     menu1 = '\t1. Source and destination count. \n\t2. Protocol count. \n\t'
-    menu2 = '3. Source user count. \n\t4. TTL Distribution. \n\tq to exit'
+    menu2 = '3. Source user count. \n\t4. TTL Distribution. \n\t5. Network connectivity \n\texit to exit'
     print(menu1 + menu2)
     return input('Enter Option: ')
+
 
 
 def input_error():
@@ -188,7 +223,9 @@ def main():
                 parser.plot_source_users_count()
             elif choose is '4':
                 parser.plot_ttl_distribution()
-            elif choose is 'q':
+            elif choose is '5':
+                parser.plot_connectivity()
+            elif choose is 'exit':
                 return 0
             else:
                 input_error()
@@ -197,7 +234,7 @@ def main():
             if file_num == 'n':
                 parser.clear()
                 break
-            elif file_num == 'q':
+            elif file_num == 'exit':
                 return 0
 
 
